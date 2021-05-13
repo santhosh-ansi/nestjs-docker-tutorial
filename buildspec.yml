@@ -1,0 +1,32 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 12
+  pre_build: 
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      -aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin 209407939845.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=209407939845.dkr.ecr.ap-southeast-1.amazonaws.com/nodetest
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=build-$(CODEBUILD_BUILD_ID | awk -F":" '{PRINT $2}')
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - docker-compose up -d dev
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo writing image definitions file. . .
+      - printf '[{"name":"nestcontainer","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - cat imagedefinitions.json
+ artifacts:
+     files: imagedefinitions.json
